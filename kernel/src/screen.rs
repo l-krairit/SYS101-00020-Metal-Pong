@@ -126,36 +126,53 @@ impl ScreenWriter {
     }
 
     pub fn draw_pixel(&mut self, x: usize, y: usize, r: u8, g: u8, b: u8) {
-        let pixel_offset = y * usize::from(self.info.stride) + x;
+        // 🐶 Bounds check: Prevent x and y from going outside the framebuffer
+        if x >= self.info.width || y >= self.info.height {
+            return; // 🛑 Ignore invalid coordinates 🐶
+        }
+    
+        // 🐶 Safe multiplication to prevent overflow
+        let pixel_offset = match y.checked_mul(self.info.stride.into()) {
+            Some(offset) => offset + x,
+            None => return, // 🛑 Prevent overflow by exiting early 🐶
+        };
+    
+        let byte_offset = match pixel_offset.checked_mul(self.info.bytes_per_pixel.into()) {
+            Some(offset) => offset,
+            None => return, // 🛑 Prevent overflow by exiting early 🐶
+        };
+    
+        // 🐶 Bounds check before accessing framebuffer
+        if byte_offset + self.info.bytes_per_pixel as usize > self.framebuffer.len() {
+            return; // 🛑 Prevent out-of-bounds panic 🐶
+        }
+    
         let color = match self.info.pixel_format {
             PixelFormat::Rgb => [r, g, b, 0],
             PixelFormat::Bgr => [b, g, r, 0],
-            other => {
-                // set a supported (but invalid) pixel format before panicking to avoid a double
-                // panic; it might not be readable though
-                self.info.pixel_format = PixelFormat::Rgb;
-                panic!("pixel format {:?} not supported in logger", other)
-            }
+            _ => return, // 🛑 Unsupported format 🐶
         };
-        let bytes_per_pixel = self.info.bytes_per_pixel;
-        let byte_offset = pixel_offset * usize::from(bytes_per_pixel);
-        self.framebuffer[byte_offset..(byte_offset + usize::from(bytes_per_pixel))]
-            .copy_from_slice(&color[..usize::from(bytes_per_pixel)]);
-        let _ = unsafe { ptr::read_volatile(&self.framebuffer[byte_offset]) };
+    
+        self.framebuffer[byte_offset..(byte_offset + self.info.bytes_per_pixel as usize)]
+            .copy_from_slice(&color[..usize::from(self.info.bytes_per_pixel)]);
     }
+    
+    
 
 }
 
 
-pub fn draw_paddle(writer: &mut ScreenWriter, x: usize, y: usize) {
-    const PADDLE_WIDTH: usize = 15;   // Make paddles wider 🐶
-const PADDLE_HEIGHT: usize = 100; // Make paddles taller 🐶
-    for dy in 0..PADDLE_HEIGHT {  // Use the updated paddle height 🐶
-        for dx in 0..PADDLE_WIDTH { // Use the updated paddle width 🐶
-            writer.draw_pixel(x + dx, y + dy, 255, 255, 255);
+pub fn draw_paddle(writer: &mut ScreenWriter, x: usize, y: usize, r: u8, g: u8, b: u8) {
+    const PADDLE_WIDTH: usize = 15;  
+    const PADDLE_HEIGHT: usize = 100; 
+
+    for dy in 0..PADDLE_HEIGHT {
+        for dx in 0..PADDLE_WIDTH {
+            writer.draw_pixel(x + dx, y + dy, r, g, b);
         }
     }
 }
+
 
 
 pub fn draw_ball(writer: &mut ScreenWriter, x: usize, y: usize, r: u8, g: u8, b: u8) {

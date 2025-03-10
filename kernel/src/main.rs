@@ -54,8 +54,8 @@ static mut PLAYER2_PADDLE_X: usize = 0; // Will be initialized in kernel_main
 // 🎱 Ball Position and Velocity
 static mut BALL_X: usize = 0; // Will be initialized in kernel_main
 static mut BALL_Y: usize = 0; // Will be initialized in kernel_main
-static mut BALL_VEL_X: isize = 60;  
-static mut BALL_VEL_Y: isize = 60;
+static mut BALL_VEL_X: isize = 100;  
+static mut BALL_VEL_Y: isize = 100;
 
 // 🏆 Player Scores
 static mut PLAYER1_SCORE: usize = 0;
@@ -141,42 +141,53 @@ fn reset_ball() {
     unsafe {
         BALL_X = SCREEN_WIDTH / 2;
         BALL_Y = SCREEN_HEIGHT / 2;
-        BALL_VEL_X = if BALL_VEL_X > 0 { -2 } else { 2 };  
-        BALL_VEL_Y = 2;
+
+        BALL_VEL_X = if BALL_VEL_X > 0 { -100 } else { 100 };
+        BALL_VEL_Y = if BALL_VEL_Y > 0 { -100 } else { 100 };
     }
 }
+
 
 fn tick() {
     unsafe {
         let writer = screenwriter();
 
-        // Erase the old ball by drawing it in black
-        draw_ball(writer, BALL_X, BALL_Y, 0, 0, 0);  
+        // 🐶 Copy ball position into local variables (fixes mutable static reference issue)
+        let ball_x = BALL_X;
+        let ball_y = BALL_Y;
 
-        // Move ball
+        // 🐶 Print ball position in the serial console
+        writeln!(serial(), "Ball Position -> X: {}, Y: {}", ball_x, ball_y).unwrap();
+
+        // 🏓 Erase previous paddle positions
+        draw_paddle(writer, PLAYER1_PADDLE_X, PLAYER1_PADDLE_Y, 0, 0, 0);
+        draw_paddle(writer, PLAYER2_PADDLE_X, PLAYER2_PADDLE_Y, 0, 0, 0);
+        draw_ball(writer, ball_x, ball_y, 0, 0, 0);
+
+        // Move the ball
         BALL_X = (BALL_X as isize + BALL_VEL_X) as usize;
         BALL_Y = (BALL_Y as isize + BALL_VEL_Y) as usize;
 
-        // Ball collision with top/bottom walls
+        // 🏓 Ball collision with top/bottom
         if BALL_Y <= 0 || BALL_Y + BALL_SIZE >= SCREEN_HEIGHT {
             BALL_VEL_Y = -BALL_VEL_Y;
         }
 
-        // Ball collision with Player 1 paddle (LEFT)
+        // 🏓 Ball collision with Player 1 paddle (LEFT)
         if BALL_X <= PLAYER1_PADDLE_X + PADDLE_WIDTH &&
            BALL_Y + BALL_SIZE >= PLAYER1_PADDLE_Y &&
            BALL_Y <= PLAYER1_PADDLE_Y + PADDLE_HEIGHT {
-            BALL_VEL_X = -BALL_VEL_X;
+            BALL_VEL_X = BALL_VEL_X.abs();
         }
 
-        // Ball collision with Player 2 paddle (RIGHT)
+        // 🏓 Ball collision with Player 2 paddle (RIGHT)
         if BALL_X + BALL_SIZE >= PLAYER2_PADDLE_X &&
            BALL_Y + BALL_SIZE >= PLAYER2_PADDLE_Y &&
            BALL_Y <= PLAYER2_PADDLE_Y + PADDLE_HEIGHT {
-            BALL_VEL_X = -BALL_VEL_X;
+            BALL_VEL_X = -BALL_VEL_X.abs();
         }
 
-        // Ball goes out of bounds (score update)
+        // 🎯 Ball goes out of bounds (score update)
         if BALL_X <= 0 {
             PLAYER2_SCORE += 1;
             reset_ball();
@@ -185,28 +196,36 @@ fn tick() {
             reset_ball();
         }
 
-        // Draw everything once (no full-screen clear)
+        // 🏓 Draw everything correctly 🐶
         draw_center_line(writer);
         draw_score(writer, PLAYER1_SCORE, PLAYER2_SCORE);
-        draw_paddle(writer, PLAYER1_PADDLE_X, PLAYER1_PADDLE_Y);
-        draw_paddle(writer, PLAYER2_PADDLE_X, PLAYER2_PADDLE_Y);
-        draw_ball(writer, BALL_X, BALL_Y, 255, 255, 255);  // Draw new ball
+        draw_paddle(writer, PLAYER1_PADDLE_X, PLAYER1_PADDLE_Y, 255, 255, 255);
+        draw_paddle(writer, PLAYER2_PADDLE_X, PLAYER2_PADDLE_Y, 255, 255, 255);
+        draw_ball(writer, BALL_X, BALL_Y, 255, 255, 255);
     }
 }
 
 
 
+
+
+
+
 fn key(key: DecodedKey) {
     unsafe {
+        let writer = screenwriter();
+
         match key {
             // 🏓 Player 1 controls (W/S)
             DecodedKey::Unicode('w') => {
                 if PLAYER1_PADDLE_Y > PADDLE_SPEED {
+                    draw_paddle(writer, PLAYER1_PADDLE_X, PLAYER1_PADDLE_Y, 0, 0, 0); // Erase old 🐶
                     PLAYER1_PADDLE_Y -= PADDLE_SPEED;
                 }
             }
             DecodedKey::Unicode('s') => {
                 if PLAYER1_PADDLE_Y + PADDLE_HEIGHT + PADDLE_SPEED < SCREEN_HEIGHT {
+                    draw_paddle(writer, PLAYER1_PADDLE_X, PLAYER1_PADDLE_Y, 0, 0, 0); // Erase old 🐶
                     PLAYER1_PADDLE_Y += PADDLE_SPEED;
                 }
             }
@@ -214,11 +233,13 @@ fn key(key: DecodedKey) {
             // 🏓 Player 2 controls (Arrow Up/Down)
             DecodedKey::RawKey(pc_keyboard::KeyCode::ArrowUp) => {
                 if PLAYER2_PADDLE_Y > PADDLE_SPEED {
+                    draw_paddle(writer, PLAYER2_PADDLE_X, PLAYER2_PADDLE_Y, 0, 0, 0); // Erase old 🐶
                     PLAYER2_PADDLE_Y -= PADDLE_SPEED;
                 }
             }
             DecodedKey::RawKey(pc_keyboard::KeyCode::ArrowDown) => {
                 if PLAYER2_PADDLE_Y + PADDLE_HEIGHT + PADDLE_SPEED < SCREEN_HEIGHT {
+                    draw_paddle(writer, PLAYER2_PADDLE_X, PLAYER2_PADDLE_Y, 0, 0, 0); // Erase old 🐶
                     PLAYER2_PADDLE_Y += PADDLE_SPEED;
                 }
             }
@@ -227,4 +248,5 @@ fn key(key: DecodedKey) {
         }
     }
 }
+
 
