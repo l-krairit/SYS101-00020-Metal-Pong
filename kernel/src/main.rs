@@ -43,6 +43,8 @@ const PADDLE_HEIGHT: usize = 100;
 const BALL_SIZE: usize = 12;       
 const PADDLE_SPEED: usize = 50; 
 
+const BOUNDARY_OFFSET: usize = PADDLE_WIDTH;
+
 // 🏓 Player 1 (Left Paddle)
 static mut PLAYER1_PADDLE_Y: usize = 0; // Will be initialized in kernel_main
 const PLAYER1_PADDLE_X: usize = 30; 
@@ -54,14 +56,12 @@ static mut PLAYER2_PADDLE_X: usize = 0; // Will be initialized in kernel_main
 // 🎱 Ball Position and Velocity
 static mut BALL_X: usize = 0; // Will be initialized in kernel_main
 static mut BALL_Y: usize = 0; // Will be initialized in kernel_main
-static mut BALL_VEL_X: isize = 100;  
-static mut BALL_VEL_Y: isize = 100;
+static mut BALL_VEL_X: isize = 30;  
+static mut BALL_VEL_Y: isize = 30;
 
 // 🏆 Player Scores
 static mut PLAYER1_SCORE: usize = 0;
 static mut PLAYER2_SCORE: usize = 0;
-
-
 
 
 fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
@@ -142,8 +142,8 @@ fn reset_ball() {
         BALL_X = SCREEN_WIDTH / 2;
         BALL_Y = SCREEN_HEIGHT / 2;
 
-        BALL_VEL_X = if BALL_VEL_X > 0 { -100 } else { 100 };
-        BALL_VEL_Y = if BALL_VEL_Y > 0 { -100 } else { 100 };
+        BALL_VEL_X = if BALL_VEL_X > 0 { -30 } else { 30 };
+        BALL_VEL_Y = if BALL_VEL_Y > 0 { -30 } else { 30 };
     }
 }
 
@@ -158,6 +158,7 @@ fn tick() {
 
         // 🐶 Print ball position in the serial console
         writeln!(serial(), "Ball Position -> X: {}, Y: {}", ball_x, ball_y).unwrap();
+        writeln!(serial(), "Boundary Offset -> {}", BOUNDARY_OFFSET).unwrap();
 
         // 🏓 Erase previous paddle positions
         draw_paddle(writer, PLAYER1_PADDLE_X, PLAYER1_PADDLE_Y, 0, 0, 0);
@@ -179,6 +180,7 @@ fn tick() {
            BALL_Y <= PLAYER1_PADDLE_Y + PADDLE_HEIGHT {
             BALL_VEL_X = BALL_VEL_X.abs();
         }
+        
 
         // 🏓 Ball collision with Player 2 paddle (RIGHT)
         if BALL_X + BALL_SIZE >= PLAYER2_PADDLE_X &&
@@ -188,7 +190,7 @@ fn tick() {
         }
 
         // 🎯 Ball goes out of bounds (score update)
-        if BALL_X <= 0 {
+        if BALL_X <= BOUNDARY_OFFSET {
             PLAYER2_SCORE += 1;
             reset_ball();
         } else if BALL_X >= SCREEN_WIDTH {
@@ -204,11 +206,6 @@ fn tick() {
         draw_ball(writer, BALL_X, BALL_Y, 255, 255, 255);
     }
 }
-
-
-
-
-
 
 
 fn key(key: DecodedKey) {

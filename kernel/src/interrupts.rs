@@ -220,7 +220,7 @@ unsafe fn init_timer(lapic_pointer: *mut u32) {
         tdcr.write_volatile(0x3); // Divide by 16 mode
 
         let ticr = lapic_pointer.offset(APICOffset::Ticr as isize / 4);
-        ticr.write_volatile(0x0400_0000); // An arbitrary value for the initial value of the timer
+        ticr.write_volatile(0x0100_0000); // An arbitrary value for the initial value of the timer
     }
 }
 
@@ -346,7 +346,6 @@ extern "x86-interrupt" fn keyboard_interrupt_handler(_stack_frame: InterruptStac
                 HandleControl::Ignore)
             );
     }
-
     let mut keyboard = KEYBOARD.lock();
     let mut port = Port::new(0x60);
 
@@ -359,7 +358,5 @@ extern "x86-interrupt" fn keyboard_interrupt_handler(_stack_frame: InterruptStac
             }
         }
     }
-
     end_interrupt();
-
 }
