@@ -21,7 +21,7 @@ use pc_keyboard::{DecodedKey, KeyCode};
 use x86_64::registers::control::Cr3;
 use x86_64::VirtAddr;
 use crate::frame_allocator::BootInfoFrameAllocator;
-use crate::screen::{Writer, ScreenWriter, screenwriter, draw_paddle, draw_ball, draw_center_line, draw_score};
+use crate::screen::{ScreenWriter, screenwriter, draw_paddle, draw_ball, draw_center_line, draw_score};
 
 // Game Variables
 static mut SCREEN_WIDTH: usize = 0;
@@ -218,38 +218,38 @@ fn tick() {
 
                 const PADDLE_BUFFER: usize = 8; 
 
-                unsafe {
-                    // Ball collision with walls (top/bottom)
-                    if BALL_Y <= 0 || BALL_Y + BALL_SIZE >= SCREEN_HEIGHT {
-                        BALL_VEL_Y = -BALL_VEL_Y;
-                    }
                 
-                    // Ball collision with Player 1 
-                    if BALL_X <= PLAYER1_PADDLE_X + PADDLE_WIDTH + PADDLE_BUFFER && 
-                        BALL_Y + BALL_SIZE >= PLAYER1_PADDLE_Y - PADDLE_BUFFER &&    
-                        BALL_Y <= PLAYER1_PADDLE_Y + PADDLE_HEIGHT + PADDLE_BUFFER {
-                        BALL_VEL_X = BALL_VEL_X.abs(); 
-                    }
-                    
-                    // Ball collision with Player 2 
-                    if BALL_X + BALL_SIZE >= PLAYER2_PADDLE_X - PADDLE_BUFFER && 
-                        BALL_Y + BALL_SIZE >= PLAYER2_PADDLE_Y - PADDLE_BUFFER &&  
-                        BALL_Y <= PLAYER2_PADDLE_Y + PADDLE_HEIGHT + PADDLE_BUFFER {
-                        BALL_VEL_X = -BALL_VEL_X.abs(); 
-                    }
+                // Ball collision with walls (top/bottom)
+                if BALL_Y <= 0 || BALL_Y + BALL_SIZE >= SCREEN_HEIGHT {
+                    BALL_VEL_Y = -BALL_VEL_Y;
                 }
+            
+                // Ball collision with Player 1 
+                if BALL_X <= PLAYER1_PADDLE_X + PADDLE_WIDTH + PADDLE_BUFFER && 
+                    BALL_Y + BALL_SIZE >= PLAYER1_PADDLE_Y - PADDLE_BUFFER &&    
+                    BALL_Y <= PLAYER1_PADDLE_Y + PADDLE_HEIGHT + PADDLE_BUFFER {
+                    BALL_VEL_X = BALL_VEL_X.abs(); 
+                }
+                
+                // Ball collision with Player 2 
+                if BALL_X + BALL_SIZE >= PLAYER2_PADDLE_X - PADDLE_BUFFER && 
+                    BALL_Y + BALL_SIZE >= PLAYER2_PADDLE_Y - PADDLE_BUFFER &&  
+                    BALL_Y <= PLAYER2_PADDLE_Y + PADDLE_HEIGHT + PADDLE_BUFFER {
+                    BALL_VEL_X = -BALL_VEL_X.abs(); 
+                }
+                
                 
                 if BALL_X <= PADDLE_WIDTH {
                     PLAYER2_SCORE += 1;
                     if PLAYER2_SCORE >= WINNING_SCORE {
-                        unsafe { GAME_STATE = GameState::GameOver; }
+                        GAME_STATE = GameState::GameOver; 
                     } else {
                         reset_ball();
                     }
                 } else if BALL_X >= SCREEN_WIDTH {
                     PLAYER1_SCORE += 1;
                     if PLAYER1_SCORE >= WINNING_SCORE {
-                        unsafe { GAME_STATE = GameState::GameOver; }
+                        GAME_STATE = GameState::GameOver; 
                     } else {
                         reset_ball();
                     }
