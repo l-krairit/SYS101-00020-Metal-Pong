@@ -30,7 +30,6 @@ pub fn init(buffer: &'static mut FrameBuffer) {
     *unsafe { WRITER.get_mut() } = Some(writer);
 }
 
-/// Additional vertical space between lines
 const LINE_SPACING: usize = 0;
 
 pub struct ScreenWriter {
@@ -61,7 +60,6 @@ impl ScreenWriter {
         self.x_pos = 0;
     }
 
-    /// Erases all text on the screen.
     pub fn clear(&mut self) {
         self.x_pos = 0;
         self.y_pos = 0;
@@ -126,31 +124,28 @@ impl ScreenWriter {
     }
 
     pub fn draw_pixel(&mut self, x: usize, y: usize, r: u8, g: u8, b: u8) {
-        // 🐶 Bounds check: Prevent x and y from going outside the framebuffer
         if x >= self.info.width || y >= self.info.height {
-            return; // 🛑 Ignore invalid coordinates 🐶
+            return;
         }
     
-        // 🐶 Safe multiplication to prevent overflow
         let pixel_offset = match y.checked_mul(self.info.stride.into()) {
             Some(offset) => offset + x,
-            None => return, // 🛑 Prevent overflow by exiting early 🐶
+            None => return, 
         };
     
         let byte_offset = match pixel_offset.checked_mul(self.info.bytes_per_pixel.into()) {
             Some(offset) => offset,
-            None => return, // 🛑 Prevent overflow by exiting early 🐶
+            None => return, 
         };
     
-        // 🐶 Bounds check before accessing framebuffer
         if byte_offset + self.info.bytes_per_pixel as usize > self.framebuffer.len() {
-            return; // 🛑 Prevent out-of-bounds panic 🐶
+            return; 
         }
     
         let color = match self.info.pixel_format {
             PixelFormat::Rgb => [r, g, b, 0],
             PixelFormat::Bgr => [b, g, r, 0],
-            _ => return, // 🛑 Unsupported format 🐶
+            _ => return, 
         };
     
         self.framebuffer[byte_offset..(byte_offset + self.info.bytes_per_pixel as usize)]
@@ -222,6 +217,38 @@ impl ScreenWriter {
         self.y_pos = y;
         for c in text.chars() {
             self.write_char(c);
+        }
+    }
+
+    pub fn write_large_char(&mut self, c: char, x: usize, y: usize, r: u8, g: u8, b: u8) {
+        const SCALE: usize = 3; 
+        
+        if let Some(bitmap_char) = get_raster(c, FontWeight::Regular, Size16) {
+            for (char_y, row) in bitmap_char.raster().iter().enumerate() {
+                for (char_x, intensity) in row.iter().enumerate() {
+                    if *intensity > 0 {
+                        for dy in 0..SCALE {
+                            for dx in 0..SCALE {
+                                self.draw_pixel(
+                                    x + char_x * SCALE + dx,
+                                    y + char_y * SCALE + dy,
+                                    r, g, b
+                                );
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    pub fn write_large_text(&mut self, text: &str, x: usize, y: usize, r: u8, g: u8, b: u8) {
+        const SCALE: usize = 3;
+        const CHAR_WIDTH: usize = 8 * SCALE;
+
+        let mut current_x = x;
+        for c in text.chars() {
+            self.write_large_char(c, current_x, y, r, g, b);
+            current_x += CHAR_WIDTH;
         }
     }
 }

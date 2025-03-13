@@ -11,10 +11,8 @@ mod frame_allocator;
 mod interrupts;
 mod gdt;
 
-use alloc::boxed::Box;
 use core::fmt::Write;
 use core::slice;
-use core::sync::atomic::{AtomicI32, Ordering};
 use bootloader_api::{entry_point, BootInfo, BootloaderConfig};
 use bootloader_api::config::Mapping::Dynamic;
 use bootloader_api::info::MemoryRegionKind;
@@ -23,7 +21,7 @@ use pc_keyboard::{DecodedKey, KeyCode};
 use x86_64::registers::control::Cr3;
 use x86_64::VirtAddr;
 use crate::frame_allocator::BootInfoFrameAllocator;
-use crate::screen::{Writer, screenwriter, draw_paddle, draw_ball, draw_center_line, draw_score};
+use crate::screen::{Writer, ScreenWriter, screenwriter, draw_paddle, draw_ball, draw_center_line, draw_score};
 
 // Game Variables
 static mut SCREEN_WIDTH: usize = 0;
@@ -52,8 +50,16 @@ static mut BALL_VEL_Y: isize = 10;
 static mut PLAYER1_SCORE: usize = 0; 
 static mut PLAYER2_SCORE: usize = 0;
 
-// Game State 
-static mut GAME_RUNNING: AtomicI32 = AtomicI32::new(0); 
+// Game State
+#[derive(PartialEq)]
+enum GameState {
+    StartScreen,
+    Playing,
+    GameOver
+}
+static mut GAME_STATE: GameState = GameState::StartScreen;
+const WINNING_SCORE: usize = 5;
+
 
 const BOOTLOADER_CONFIG: BootloaderConfig = {
     let mut config = BootloaderConfig::new_default();
@@ -130,16 +136,55 @@ fn start() {
 
     unsafe {
         let writer = screenwriter();
-        
-        // Draw initial paddles with white color
+        writer.clear();
+        GAME_STATE = GameState::StartScreen;
+        draw_start_screen(writer);
+    }
+}
+
+fn draw_start_screen(writer: &mut ScreenWriter) {
+    let screen_width = unsafe { SCREEN_WIDTH };
+    let screen_height = unsafe { SCREEN_HEIGHT };
+
+    writer.write_large_text("PONG", screen_width / 2 - 60, screen_height / 3, 255, 255, 255);
+    writer.write_large_text("Press SPACE to Start", screen_width / 2 - 200, screen_height / 2, 255, 255, 255);
+}
+
+fn draw_game_over_screen(writer: &mut ScreenWriter) {
+    let screen_width = unsafe { SCREEN_WIDTH };
+    let screen_height = unsafe { SCREEN_HEIGHT };
+    writer.write_large_text("GAME OVER", screen_width / 2 - 120, screen_height / 3, 255, 255, 255);
+    let winner_text = if unsafe { PLAYER1_SCORE >= WINNING_SCORE } {
+        "Player 1 Wins!"
+    } else {
+        "Player 2 Wins!"
+    };
+    writer.write_large_text(winner_text, screen_width / 2 - 150, screen_height / 2, 255, 255, 255);
+    writer.write_large_text("Press SPACE to Restart", screen_width / 2 - 200, screen_height / 2 + 100, 255, 255, 255);
+}
+
+fn init_game() {
+    unsafe {
+        let writer = screenwriter();
+
+        let screen_width = SCREEN_WIDTH;
+        let screen_height = SCREEN_HEIGHT;
+
+        BALL_X = screen_width / 2;
+        BALL_Y = screen_height / 2;
+
+        PLAYER1_PADDLE_Y = screen_height / 2 - PADDLE_HEIGHT / 2;
+        PLAYER2_PADDLE_Y = screen_height / 2 - PADDLE_HEIGHT / 2;
+
+        PLAYER1_SCORE = 0;
+        PLAYER2_SCORE = 0;
+
+        GAME_STATE = GameState::Playing;
+
         draw_paddle(writer, PLAYER1_PADDLE_X, PLAYER1_PADDLE_Y, 255, 255, 255);
         draw_paddle(writer, PLAYER2_PADDLE_X, PLAYER2_PADDLE_Y, 255, 255, 255);
-        
-        // Draw the center line and initial score
         draw_center_line(writer);
         draw_score(writer, PLAYER1_SCORE, PLAYER2_SCORE);
-        
-        // Draw the initial ball position
         draw_ball(writer, BALL_X, BALL_Y, 255, 255, 255);
     }
 }
@@ -159,54 +204,57 @@ fn tick() {
     unsafe {
         let writer = screenwriter();
 
-        // 🐶 Copy ball position into local variables (fixes mutable static reference issue)
-        let ball_x = BALL_X;
-        let ball_y = BALL_Y;
+        match GAME_STATE {
+            GameState::StartScreen => {
+                draw_start_screen(writer);
+            }
+            GameState::Playing => {
+                let ball_x = BALL_X;
+                let ball_y = BALL_Y;
+                draw_ball(writer, ball_x, ball_y, 0, 0, 0);
+                BALL_X = (BALL_X as isize + BALL_VEL_X) as usize;
+                BALL_Y = (BALL_Y as isize + BALL_VEL_Y) as usize;
 
-        // 🐶 Print ball position in the serial console
-        writeln!(serial(), "Ball Position -> X: {}, Y: {}", ball_x, ball_y).unwrap();
+                const PADDLE_BUFFER: usize = 8; 
 
-        // Erase the previous ball position
-        draw_ball(writer, ball_x, ball_y, 0, 0, 0);
+                unsafe {
+                    // Ball collision with walls (top/bottom)
+                    if BALL_Y <= 0 || BALL_Y + BALL_SIZE >= SCREEN_HEIGHT {
+                        BALL_VEL_Y = -BALL_VEL_Y;
+                    }
+                
+                    // Ball collision with Player 1 
+                    if BALL_X <= PLAYER1_PADDLE_X + PADDLE_WIDTH + PADDLE_BUFFER && 
+                        BALL_Y + BALL_SIZE >= PLAYER1_PADDLE_Y - PADDLE_BUFFER &&    
+                        BALL_Y <= PLAYER1_PADDLE_Y + PADDLE_HEIGHT + PADDLE_BUFFER {
+                        BALL_VEL_X = BALL_VEL_X.abs(); 
+                    }
+                    
+                    // Ball collision with Player 2 
+                    if BALL_X + BALL_SIZE >= PLAYER2_PADDLE_X - PADDLE_BUFFER && 
+                        BALL_Y + BALL_SIZE >= PLAYER2_PADDLE_Y - PADDLE_BUFFER &&  
+                        BALL_Y <= PLAYER2_PADDLE_Y + PADDLE_HEIGHT + PADDLE_BUFFER {
+                        BALL_VEL_X = -BALL_VEL_X.abs(); 
+                    }
+                }
+                
+                if BALL_X <= PADDLE_WIDTH {
+                    PLAYER2_SCORE += 1;
+                    reset_ball();
+                } else if BALL_X >= SCREEN_WIDTH {
+                    PLAYER1_SCORE += 1;
+                    reset_ball();
+                }
 
-        // Move the ball
-        BALL_X = (BALL_X as isize + BALL_VEL_X) as usize;
-        BALL_Y = (BALL_Y as isize + BALL_VEL_Y) as usize;
-
-        // 🏓 Ball collision with top/bottom
-        if BALL_Y <= 0 || BALL_Y + BALL_SIZE >= SCREEN_HEIGHT {
-            BALL_VEL_Y = -BALL_VEL_Y;
-        }
-
-        // 🏓 Ball collision with Player 1 paddle (LEFT)
-        if BALL_X <= PLAYER1_PADDLE_X + PADDLE_WIDTH &&
-           BALL_Y + BALL_SIZE >= PLAYER1_PADDLE_Y &&
-           BALL_Y <= PLAYER1_PADDLE_Y + PADDLE_HEIGHT {
-            BALL_VEL_X = BALL_VEL_X.abs();
+                draw_center_line(writer);
+                draw_score(writer, PLAYER1_SCORE, PLAYER2_SCORE);
+                draw_ball(writer, BALL_X, BALL_Y, 255, 255, 255);
+            }
+            GameState::GameOver => {
+                draw_game_over_screen(writer);
+            }
         }
         
-        // 🏓 Ball collision with Player 2 paddle (RIGHT)
-        if BALL_X + BALL_SIZE >= PLAYER2_PADDLE_X &&
-           BALL_Y + BALL_SIZE >= PLAYER2_PADDLE_Y &&
-           BALL_Y <= PLAYER2_PADDLE_Y + PADDLE_HEIGHT {
-            BALL_VEL_X = -BALL_VEL_X.abs();
-        }
-
-        // 🎯 Ball goes out of bounds (score update)
-        if BALL_X <= PADDLE_WIDTH {
-            PLAYER2_SCORE += 1;
-            reset_ball();
-        } else if BALL_X >= SCREEN_WIDTH {
-            PLAYER1_SCORE += 1;
-            reset_ball();
-        }
-
-        // 🏓 Draw center line and score
-        draw_center_line(writer);
-        draw_score(writer, PLAYER1_SCORE, PLAYER2_SCORE);
-
-        // Draw the ball at its new position
-        draw_ball(writer, BALL_X, BALL_Y, 255, 255, 255);
     }
 }
 
@@ -214,40 +262,65 @@ fn key(key: DecodedKey) {
     unsafe {
         let writer = screenwriter();
 
-        match key {
-            // 🏓 Player 1 controls (W/S)
-            DecodedKey::Unicode('w') => {
-                if PLAYER1_PADDLE_Y > PADDLE_SPEED {
-                    draw_paddle(writer, PLAYER1_PADDLE_X, PLAYER1_PADDLE_Y, 0, 0, 0); // Erase old paddle
-                    PLAYER1_PADDLE_Y -= PADDLE_SPEED;
-                    draw_paddle(writer, PLAYER1_PADDLE_X, PLAYER1_PADDLE_Y, 255, 255, 255); // Draw new paddle
+        match GAME_STATE {
+            GameState::StartScreen => {
+                match key {
+                    DecodedKey::Unicode(' ') => {
+                        init_game();
+                        writer.clear();
+                    },
+                    _ => {}
                 }
             }
-            DecodedKey::Unicode('s') => {
-                if PLAYER1_PADDLE_Y + PADDLE_HEIGHT + PADDLE_SPEED < SCREEN_HEIGHT {
-                    draw_paddle(writer, PLAYER1_PADDLE_X, PLAYER1_PADDLE_Y, 0, 0, 0); // Erase old paddle
-                    PLAYER1_PADDLE_Y += PADDLE_SPEED;
-                    draw_paddle(writer, PLAYER1_PADDLE_X, PLAYER1_PADDLE_Y, 255, 255, 255); // Draw new paddle
+            GameState::Playing => {
+                match key {
+                    // Player 1 controls (W/S)
+                    DecodedKey::Unicode('w') => {
+                        if PLAYER1_PADDLE_Y > PADDLE_SPEED {
+                            draw_paddle(writer, PLAYER1_PADDLE_X, PLAYER1_PADDLE_Y, 0, 0, 0); // Erase old paddle
+                            PLAYER1_PADDLE_Y -= PADDLE_SPEED;
+                            draw_paddle(writer, PLAYER1_PADDLE_X, PLAYER1_PADDLE_Y, 255, 255, 255); // Draw new paddle
+                        }
+                    }
+                    
+                    DecodedKey::Unicode('s') => {
+                        if PLAYER1_PADDLE_Y + PADDLE_HEIGHT + PADDLE_SPEED < SCREEN_HEIGHT {
+                            draw_paddle(writer, PLAYER1_PADDLE_X, PLAYER1_PADDLE_Y, 0, 0, 0); // Erase old paddle
+                            PLAYER1_PADDLE_Y += PADDLE_SPEED;
+                            draw_paddle(writer, PLAYER1_PADDLE_X, PLAYER1_PADDLE_Y, 255, 255, 255); // Draw new paddle
+                        }
+                    }
+        
+                    // Player 2 controls (Arrow Up/Down)
+                    DecodedKey::RawKey(KeyCode::ArrowUp) => {
+                        if PLAYER2_PADDLE_Y > PADDLE_SPEED {
+                            draw_paddle(writer, PLAYER2_PADDLE_X, PLAYER2_PADDLE_Y, 0, 0, 0); // Erase old paddle
+                            PLAYER2_PADDLE_Y -= PADDLE_SPEED;
+                            draw_paddle(writer, PLAYER2_PADDLE_X, PLAYER2_PADDLE_Y, 255, 255, 255); // Draw new paddle
+                        }
+                    }
+                    DecodedKey::RawKey(KeyCode::ArrowDown) => {
+                        if PLAYER2_PADDLE_Y + PADDLE_HEIGHT + PADDLE_SPEED < SCREEN_HEIGHT {
+                            draw_paddle(writer, PLAYER2_PADDLE_X, PLAYER2_PADDLE_Y, 0, 0, 0); // Erase old paddle
+                            PLAYER2_PADDLE_Y += PADDLE_SPEED;
+                            draw_paddle(writer, PLAYER2_PADDLE_X, PLAYER2_PADDLE_Y, 255, 255, 255); // Draw new paddle
+                        }
+                    }
+        
+                    _ => {}
                 }
             }
-
-            // 🏓 Player 2 controls (Arrow Up/Down)
-            DecodedKey::RawKey(KeyCode::ArrowUp) => {
-                if PLAYER2_PADDLE_Y > PADDLE_SPEED {
-                    draw_paddle(writer, PLAYER2_PADDLE_X, PLAYER2_PADDLE_Y, 0, 0, 0); // Erase old paddle
-                    PLAYER2_PADDLE_Y -= PADDLE_SPEED;
-                    draw_paddle(writer, PLAYER2_PADDLE_X, PLAYER2_PADDLE_Y, 255, 255, 255); // Draw new paddle
+            GameState::GameOver => {
+                match key {
+                    DecodedKey::Unicode(' ') => {
+                        // Restart the game when space is pressed
+                        init_game();
+                        writer.clear();
+                    },
+                    _ => {}
                 }
             }
-            DecodedKey::RawKey(KeyCode::ArrowDown) => {
-                if PLAYER2_PADDLE_Y + PADDLE_HEIGHT + PADDLE_SPEED < SCREEN_HEIGHT {
-                    draw_paddle(writer, PLAYER2_PADDLE_X, PLAYER2_PADDLE_Y, 0, 0, 0); // Erase old paddle
-                    PLAYER2_PADDLE_Y += PADDLE_SPEED;
-                    draw_paddle(writer, PLAYER2_PADDLE_X, PLAYER2_PADDLE_Y, 255, 255, 255); // Draw new paddle
-                }
-            }
-
-            _ => {}
         }
     }
 }
+
