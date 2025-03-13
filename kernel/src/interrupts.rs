@@ -217,10 +217,10 @@ unsafe fn init_timer(lapic_pointer: *mut u32) {
         lvt_lint1.write_volatile(0x20 | (1 << 17)); // Vector 0x20, periodic mode
 
         let tdcr = lapic_pointer.offset(APICOffset::Tdcr as isize / 4);
-        tdcr.write_volatile(0x3); // Divide by 16 mode
+        tdcr.write_volatile(0x2); // Divide by 16 mode
 
         let ticr = lapic_pointer.offset(APICOffset::Ticr as isize / 4);
-        ticr.write_volatile(0x0100_0000); // An arbitrary value for the initial value of the timer
+        ticr.write_volatile(0x30_0000); // An arbitrary value for the initial value of the timer
     }
 }
 

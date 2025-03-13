@@ -1,18 +1,18 @@
 #[global_allocator]
-static ALLOCATOR: DummyAllocator = DummyAllocator;
+static ALLOCATOR: MonkeyAllocator = MonkeyAllocator;
 
 use alloc::alloc::{GlobalAlloc, Layout};
 use core::ptr::null_mut;
 use core::fmt::Write;
 
 use crate::serial;
-pub struct DummyAllocator;
+pub struct MonkeyAllocator;
 
 pub static mut HEAP_START: usize = 0x0;
 pub static mut OFFSET: usize = 0x0;
-pub const HEAP_SIZE: usize = 100 * 1024; // 100 KiB
+pub const HEAP_SIZE: usize = 10000 * 1024; // 100 KiB
 
-unsafe impl GlobalAlloc for DummyAllocator {
+unsafe impl GlobalAlloc for MonkeyAllocator {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
         let align = layout.align();
         let size = layout.size();
