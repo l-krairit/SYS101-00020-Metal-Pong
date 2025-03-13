@@ -155,9 +155,9 @@ fn draw_game_over_screen(writer: &mut ScreenWriter) {
     let screen_height = unsafe { SCREEN_HEIGHT };
     writer.write_large_text("GAME OVER", screen_width / 2 - 120, screen_height / 3, 255, 255, 255);
     let winner_text = if unsafe { PLAYER1_SCORE >= WINNING_SCORE } {
-        "Player 1 Wins!"
+        "Player 1 Wins"
     } else {
-        "Player 2 Wins!"
+        "Player 2 Wins"
     };
     writer.write_large_text(winner_text, screen_width / 2 - 150, screen_height / 2, 255, 255, 255);
     writer.write_large_text("Press SPACE to Restart", screen_width / 2 - 200, screen_height / 2 + 100, 255, 255, 255);
@@ -181,11 +181,9 @@ fn init_game() {
 
         GAME_STATE = GameState::Playing;
 
+        writer.clear();
         draw_paddle(writer, PLAYER1_PADDLE_X, PLAYER1_PADDLE_Y, 255, 255, 255);
         draw_paddle(writer, PLAYER2_PADDLE_X, PLAYER2_PADDLE_Y, 255, 255, 255);
-        draw_center_line(writer);
-        draw_score(writer, PLAYER1_SCORE, PLAYER2_SCORE);
-        draw_ball(writer, BALL_X, BALL_Y, 255, 255, 255);
     }
 }
 
@@ -240,10 +238,18 @@ fn tick() {
                 
                 if BALL_X <= PADDLE_WIDTH {
                     PLAYER2_SCORE += 1;
-                    reset_ball();
+                    if PLAYER2_SCORE >= WINNING_SCORE {
+                        unsafe { GAME_STATE = GameState::GameOver; }
+                    } else {
+                        reset_ball();
+                    }
                 } else if BALL_X >= SCREEN_WIDTH {
                     PLAYER1_SCORE += 1;
-                    reset_ball();
+                    if PLAYER1_SCORE >= WINNING_SCORE {
+                        unsafe { GAME_STATE = GameState::GameOver; }
+                    } else {
+                        reset_ball();
+                    }
                 }
 
                 draw_center_line(writer);
@@ -251,6 +257,8 @@ fn tick() {
                 draw_ball(writer, BALL_X, BALL_Y, 255, 255, 255);
             }
             GameState::GameOver => {
+                BALL_VEL_X = 0;
+                BALL_VEL_Y = 0;
                 draw_game_over_screen(writer);
             }
         }
@@ -267,7 +275,6 @@ fn key(key: DecodedKey) {
                 match key {
                     DecodedKey::Unicode(' ') => {
                         init_game();
-                        writer.clear();
                     },
                     _ => {}
                 }
@@ -313,9 +320,7 @@ fn key(key: DecodedKey) {
             GameState::GameOver => {
                 match key {
                     DecodedKey::Unicode(' ') => {
-                        // Restart the game when space is pressed
                         init_game();
-                        writer.clear();
                     },
                     _ => {}
                 }
