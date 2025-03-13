@@ -179,6 +179,9 @@ fn init_game() {
         PLAYER1_SCORE = 0;
         PLAYER2_SCORE = 0;
 
+        BALL_VEL_X = 10;  
+        BALL_VEL_Y = 10;
+
         GAME_STATE = GameState::Playing;
 
         writer.clear();
