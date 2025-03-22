@@ -133,12 +133,10 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
 }
 
 fn start() {
-
     unsafe {
         let writer = screenwriter();
         writer.clear();
         GAME_STATE = GameState::StartScreen;
-        draw_start_screen(writer);
     }
 }
 
@@ -216,12 +214,15 @@ fn tick() {
                 BALL_X = (BALL_X as isize + BALL_VEL_X) as usize;
                 BALL_Y = (BALL_Y as isize + BALL_VEL_Y) as usize;
 
-                const PADDLE_BUFFER: usize = 8; 
+                const PADDLE_BUFFER: usize = 15; 
 
                 
                 // Ball collision with walls (top/bottom)
-                if BALL_Y <= 0 || BALL_Y + BALL_SIZE >= SCREEN_HEIGHT {
+                if BALL_Y <= 5 || BALL_Y + BALL_SIZE >= SCREEN_HEIGHT {
                     BALL_VEL_Y = -BALL_VEL_Y;
+                    if BALL_Y <= 0 {
+                        BALL_Y = 0;  
+                    }
                 }
             
                 // Ball collision with Player 1 

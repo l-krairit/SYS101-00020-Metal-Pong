@@ -151,9 +151,6 @@ impl ScreenWriter {
         self.framebuffer[byte_offset..(byte_offset + self.info.bytes_per_pixel as usize)]
             .copy_from_slice(&color[..usize::from(self.info.bytes_per_pixel)]);
     }
-    
-    
-
 }
 
 
@@ -169,10 +166,9 @@ pub fn draw_paddle(writer: &mut ScreenWriter, x: usize, y: usize, r: u8, g: u8, 
 }
 
 
-
 pub fn draw_ball(writer: &mut ScreenWriter, x: usize, y: usize, r: u8, g: u8, b: u8) {
-    const BALL_SIZE: usize = 12;       // Make the ball bigger 🐶
-    for dy in 0..BALL_SIZE {  // Use the updated ball size 🐶
+    const BALL_SIZE: usize = 12;     
+    for dy in 0..BALL_SIZE {  
         for dx in 0..BALL_SIZE {
             writer.draw_pixel(x + dx, y + dy, r, g, b);
         }
@@ -182,12 +178,13 @@ pub fn draw_ball(writer: &mut ScreenWriter, x: usize, y: usize, r: u8, g: u8, b:
 
 pub fn draw_center_line(writer: &mut ScreenWriter) {
     let mid_x = writer.width() / 2;
-    for y in (0..writer.height()).step_by(20) {  // Creates a dashed effect
-        for dy in 0..10 { // Dash height
+    for y in (0..writer.height()).step_by(20) {  
+        for dy in 0..10 { 
             writer.draw_pixel(mid_x, y + dy, 200, 200, 200);
         }
     }
 }
+
 
 pub fn draw_score(writer: &mut ScreenWriter, player1_score: usize, player2_score: usize) {
     let mid_x = writer.width() / 2;
